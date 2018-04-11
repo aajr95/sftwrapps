@@ -1,14 +1,20 @@
 #I HAVE INCLUDED WORKINGS AS COMMENTS TO BETTER SHOW PROCESS
 
+#THIS FILE CONTAINS A STANDARD VADER SENTIMENT ANALYSIS AS WELL AS A TRAINING BASED 
+#METHOD THAT WAS CREADED FOR THIS ASSIGNMENT WITH NO MODULES EXCEPT PD.DATAFRAMES AS STORAGE
+
 ####Setup
 
+import numpy as np
 import pandas as pd
 #vader sentiment analysis tool citation : Hutto, C.J. & Gilbert, E.E. (2014). VADER: A Parsimonious Rule-based Model for Sentiment Analysis of Social Media Text. Eighth International Conference on Weblogs and Social Media (ICWSM-14). Ann Arbor, MI, June 2014.
 from nltk.sentiment.vader import SentimentIntensityAnalyzer 
 sia = SentimentIntensityAnalyzer()
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from nltk.classify import SklearnClassifier
 import matplotlib.pyplot as plot
+from collections import Counter
 
 file = 'G:\Tweets.CSV'#REFERENCE TWEET CSV LOCATION
 pd.set_option('max_colwidth', 800)#displays full tweets
@@ -46,6 +52,10 @@ for i in range(0, len(condensed)):
     #CLEANUP AND RESTRING
     tokenized = word_tokenize(str(condensed.text.loc[i]).lower())
     cleaned = [word for word in tokenized if word not in stopwords]
+    filter = [word for word in cleaned
+        if 'http' not in word
+        and not word.startswith('@')
+        and not word.startswith('#')]
     rejoined = ' '.join(cleaned)
     
     #AIRLINE CLASSIFICATION
@@ -55,9 +65,6 @@ for i in range(0, len(condensed)):
             
     #VVVVVADER
     values = list(sia.polarity_scores(rejoined).values())
-
-
-
     
     #Discrete determination - set values for identifying positive or negative tweet as per : https://github.com/cjhutto/vaderSentiment/blob/master/README.rst#about-the-scoring
     sentiment = 'neutral'
@@ -66,15 +73,11 @@ for i in range(0, len(condensed)):
     elif values[3] <= -0.05:
         sentiment = 'negative'
 
-       
-     
     ##STORE
-    vaderdf = vaderdf.append({'text': cleaned, 'neg':values[0], 'neutral':values[1], 'positive':values[2], 'comp':values[3], 'airline':ref_airline,'Post Time':condensed.tweet_created.loc[i], 'Sentiment':sentiment },ignore_index=True)
+    vaderdf = vaderdf.append({'text': rejoined, 'neg':values[0], 'neutral':values[1], 'positive':values[2], 'comp':values[3], 'airline':ref_airline,'Post Time':condensed.tweet_created.loc[i], 'Sentiment':sentiment },ignore_index=True)
  
 
-
-print(vaderdf)
-#print(workingdf)
+#print(vaderdf)
 
 #SCRAPPPP
 #sentences = ["hello","this is fantastic"] #was checking vadar needed to add joined line to use properly as quotation marks were causing problems
@@ -82,5 +85,111 @@ print(vaderdf)
 #    workingdfneu = workingdfneu.append({'neutral':values[2]},ignore_index=True)
 #    workingdfpos = workingdfpos.append({'positive':values[3]},ignore_index=True)
 #    workingdfcomp = workingdcomp.append({'compound':values[4]},ignore_index=True) #ERROR WAS VALUES STARTS AT 0 NOT 1 ;_;
+
+############################################################################################
+#
+#
+#
+#
+#
+#
+####BELOW THIS POINT IS A TRAINING APPROACH THAT I MADE UP BASED ON THE CLASSIFICATION OF POSITIVE AND NEGATIVE IN THE ORIGINAL HOWEVER IT CAN BE CHECKED AGAINST VADER BY 
+#SIMPLY RECOMMENTING 
+
+#TRAINING#
+
+#PARAMETERS
+training_iterations = 1000
+testing_iterations = len(red_data)
+
+tweets_train = pd.DataFrame()
+tada = red_data[['airline_sentiment', 'text']]
+traindata = tada.head(training_iterations)
+word_map = {}
+conotion_map = {}
+    
+for i in range(0,len(traindata)):
+    toke = word_tokenize(str(traindata.text.loc[i]).lower())
+    fltr = [word for word in toke
+            if 'http' not in word
+            and not word.startswith('@')
+            and not word.startswith('#')
+            ]
+    clnd = [word for word in fltr if word not in stopwords]
+    rejnd = ' '.join(clnd)    
+        
+        
+        
+    for element in rejnd.split(): #Splits up the string for individual word analysis. Therefore this loop is looping one word at a time.
+        if element in word_map:    
+            word_map[element] = word_map[element] + 1 #Adds count if in already accounted for
+        else:
+            word_map[element] = 1 #Adds count of 1 if not there alrady for unique word
+            
+        if traindata.airline_sentiment.loc[i] == 'positive': # Classified as positive word  
+            if element in conotion_map:
+                conotion_map[element] = conotion_map[element] + 1 #Adds value to word implying positive connotation (conotion short for connotation)
+            else:
+                conotion_map[element] = 1
+        elif traindata.airline_sentiment.loc[i] == 'negative': #Subtracts value from word implying negative connotation 
+            if element in conotion_map:
+                conotion_map[element] = conotion_map[element] - 1
+            else:
+                conotion_map[element] = -1 
+        else:
+            conotion_map[element] = 0
+                
+        
+                
+    
+    
+testdata = red_data.head(testing_iterations)
+
+for i in range(0,len(testdata)):
+    toke = word_tokenize(str(testdata.text.loc[i]).lower()) #Recleaning the words
+    fltr = [word for word in toke
+            if 'http' not in word
+            and not word.startswith('@')
+            and not word.startswith('#')
+            ]
+    clnd = [word for word in fltr if word not in stopwords]
+    rejnd = ' '.join(clnd)  
+   
+
+    sentiment_value = 0
+    for element in rejnd.split():#relooping individual words for inspection
+        if element in word_map:
+            sentiment_value = sentiment_value + conotion_map[element]
+        else:
+            sentiment_value = sentiment_value
+    
+        
+            
+    tweets_train = tweets_train.append({'text': rejnd, 'sentiment':sentiment_value}, ignore_index = True)
+
+
+
+#normalizing with adaptable normalization around -1 and 1 
+final_trained_df = pd.DataFrame()
+for i in range (0, len(tweets_train)):
+    tweet = tweets_train.text.loc[i]
+    sentiment_normalized = tweets_train.sentiment[i]
+    #(((tweets_train.sentiment.loc[i] - min(list(tweets_train.sentiment)))/(max(list(tweets_train.sentiment)) - min(list(tweets_train.sentiment))))*2)-1
+    
+    final_trained_df = final_trained_df.append({'text': tweet, 'sentiment_value':sentiment_normalized}, ignore_index = True)
+
+tweets_train = tweets_train
+print(final_trained_df)
+
+#Dividing into test set and deleting neutral data from training data
+
+
+
+
+
+
+
+    
+
 
 
