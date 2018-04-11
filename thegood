@@ -5,16 +5,18 @@
 
 ####Setup
 
-import numpy as np
+
 import pandas as pd
+from pandas import ExcelWriter
 #vader sentiment analysis tool citation : Hutto, C.J. & Gilbert, E.E. (2014). VADER: A Parsimonious Rule-based Model for Sentiment Analysis of Social Media Text. Eighth International Conference on Weblogs and Social Media (ICWSM-14). Ann Arbor, MI, June 2014.
-from nltk.sentiment.vader import SentimentIntensityAnalyzer 
+from nltk.sentiment.vader import SentimentIntensityAnalyzer #VADER
 sia = SentimentIntensityAnalyzer()
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from nltk.classify import SklearnClassifier
-import matplotlib.pyplot as plot
-from collections import Counter
+from nltk.tokenize import word_tokenize#NATURAL LANGUAGE TOOLKIT FOR WORD CLEANING
+import seaborn as sns #PRETTY PLOTS
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 file = 'G:\Tweets.CSV'#REFERENCE TWEET CSV LOCATION
 pd.set_option('max_colwidth', 800)#displays full tweets
@@ -24,6 +26,7 @@ red_data = pd.read_csv(file)
 red_data['tweet_created'] = pd.to_datetime(red_data['tweet_created'])
 stopwords = stopwords.words("english")
 
+RUNNUM = len(red_data)
 
 #listing all airlines in original dataset to create column dataframe below, lowercasing and stripping space
 airlines = list(red_data.airline.unique())
@@ -34,7 +37,7 @@ airlines = airlines + airlines1 + airlines2 + airlines3
 
 
 #THIS IS THE DATASET BEING INTERPRITED. HEAD IS USED TO SPEED UP TESTING. REMOVE '.head(number)' TO PERFORM OPERATION OVER FULL DATASET
-condensed = red_data.head(20)
+condensed = red_data.head(RUNNUM)
 
 
 
@@ -43,6 +46,7 @@ condensed = red_data.head(20)
 ####Pre-Processing for vader
 #Not entirely sure about efficiency of this process however this is the method I am used to programming in. 
 #All values are processed and assigned within a loop and added to the dataframe at the end of the loop. 
+#The same process is used for the training approach below however there is definately a more efficient method, I am just more comfortable at this itterative method
 #dataset conversion and stopword cleaning
 
 vaderdf = pd.DataFrame()
@@ -74,7 +78,7 @@ for i in range(0, len(condensed)):
         sentiment = 'negative'
 
     ##STORE
-    vaderdf = vaderdf.append({'text': rejoined, 'neg':values[0], 'neutral':values[1], 'positive':values[2], 'comp':values[3], 'airline':ref_airline,'Post Time':condensed.tweet_created.loc[i], 'Sentiment':sentiment },ignore_index=True)
+    vaderdf = vaderdf.append({'text': rejoined, 'neg':values[0], 'neutral':values[1], 'positive':values[2], 'comp':values[3], 'airline':ref_airline, 'Sentiment':sentiment },ignore_index=True)
  
 
 #print(vaderdf)
@@ -93,15 +97,19 @@ for i in range(0, len(condensed)):
 #
 #
 #
-####BELOW THIS POINT IS A TRAINING APPROACH THAT I MADE UP BASED ON THE CLASSIFICATION OF POSITIVE AND NEGATIVE IN THE ORIGINAL HOWEVER IT CAN BE CHECKED AGAINST VADER BY 
-#SIMPLY RECOMMENTING 
+####BELOW THIS POINT IS A TRAINING APPROACH THAT I MADE UP USING A VERY SIMPLE INTEGER VALUATION BASED ON CLASSIFICATION OF POSITIVE AND NEGATIVE IN THE ORIGINAL WITH REMOVAL OF STOPWORDS
 
-#TRAINING#
+
 
 #PARAMETERS
-training_iterations = 1000
-testing_iterations = len(red_data)
+training_iterations = int(RUNNUM*0.15)     #ERROR MESSAGE DIDNT SHOW ME THAT THIS WAS A FLOAT AND NOT ABLE TO HALF INDEXES UNTIL IT WAS WRAPPED IN INT. WAS VERY LONG TO FIND THIS ISSUE LOL
+testing_iterations = RUNNUM
 
+#FOR TRAINING SET OF 1000 AND FULL DATASET TESTING, TIME IS : 1M 48S
+
+
+
+#TRAINING#
 tweets_train = pd.DataFrame()
 tada = red_data[['airline_sentiment', 'text']]
 traindata = tada.head(training_iterations)
@@ -113,35 +121,42 @@ for i in range(0,len(traindata)):
     fltr = [word for word in toke
             if 'http' not in word
             and not word.startswith('@')
-            and not word.startswith('#')
-            ]
+            and not word.startswith('#')]
     clnd = [word for word in fltr if word not in stopwords]
     rejnd = ' '.join(clnd)    
         
-        
-        
-    for element in rejnd.split(): #Splits up the string for individual word analysis. Therefore this loop is looping one word at a time.
-        if element in word_map:    
-            word_map[element] = word_map[element] + 1 #Adds count if in already accounted for
-        else:
-            word_map[element] = 1 #Adds count of 1 if not there alrady for unique word
-            
-        if traindata.airline_sentiment.loc[i] == 'positive': # Classified as positive word  
-            if element in conotion_map:
-                conotion_map[element] = conotion_map[element] + 1 #Adds value to word implying positive connotation (conotion short for connotation)
-            else:
-                conotion_map[element] = 1
-        elif traindata.airline_sentiment.loc[i] == 'negative': #Subtracts value from word implying negative connotation 
-            if element in conotion_map:
-                conotion_map[element] = conotion_map[element] - 1
-            else:
-                conotion_map[element] = -1 
-        else:
-            conotion_map[element] = 0
-                
-        
-                
+    fltr_airlines = [word for word in clnd #added this because airlines were being given a value and that was skewing the dataset
+                     if not word in airlines]
+    airline_rjn = ' '.join(fltr_airlines)
     
+    for word in rejnd.split(): #MAKES FOLLOWING LOOP SIMPLER TO PLAN LOGICALLY AS WORD_MAP IS A STORE OF WORDS IN TWEETS AND FREQUENCY
+        if word in word_map:
+            word_map[word] = word_map[word] + 1
+        else:
+            word_map[word] = 1 
+                  
+    for word in airline_rjn.split():
+        if word in word_map:
+            if traindata.airline_sentiment.loc[i] == 'positive': # Classified as positive word  
+                if word in conotion_map:
+                    conotion_map[word] = conotion_map[word] + 1 #Adds value to word implying positive connotation (conotion short for connotation)
+                else:
+                    conotion_map[word] = 1
+            elif traindata.airline_sentiment.loc[i] == 'negative': #Subtracts value from word implying negative connotation 
+                if word in conotion_map:
+                    conotion_map[word] = conotion_map[word] - 1
+                else:
+                    conotion_map[word] = -1
+            else:
+                conotion_map[word] = 0
+        else:
+            conotion_map[word] = 0  
+        
+        conotion_map[word] = conotion_map[word]/len(word_tokenize(rejnd)) #this places equal value to each tweet in an attempt to standardize dataset
+                
+        
+                
+#TESTING
     
 testdata = red_data.head(testing_iterations)
 
@@ -158,7 +173,7 @@ for i in range(0,len(testdata)):
 
     sentiment_value = 0
     for element in rejnd.split():#relooping individual words for inspection
-        if element in word_map:
+        if element in conotion_map:
             sentiment_value = sentiment_value + conotion_map[element]
         else:
             sentiment_value = sentiment_value
@@ -170,26 +185,83 @@ for i in range(0,len(testdata)):
 
 
 #normalizing with adaptable normalization around -1 and 1 
-final_trained_df = pd.DataFrame()
+trained_df = pd.DataFrame()
+
 for i in range (0, len(tweets_train)):
     tweet = tweets_train.text.loc[i]
-    sentiment_normalized = tweets_train.sentiment[i]
-    #(((tweets_train.sentiment.loc[i] - min(list(tweets_train.sentiment)))/(max(list(tweets_train.sentiment)) - min(list(tweets_train.sentiment))))*2)-1
+    sentiment_normalized = (((tweets_train.sentiment.loc[i] - min(list(tweets_train.sentiment)))/(max(list(tweets_train.sentiment)) - min(list(tweets_train.sentiment))))*2)-1
+      
+#GIVING DISCRETE VALUE BASED ON SAME VALUES FOR VADER TO GIVE ACCURATE COMPARISON  
+    sentiment_discrete = 'neutral'
+    if sentiment_normalized >= 0.05:
+        sentiment_discrete = 'postitive'
+    elif sentiment_normalized <= -0.05:
+        sentiment_discrete = 'negative'
+
+#STORING TEsTED VALUES FROM TRAINING DATA   
+    trained_df = trained_df.append({'text': tweet, 'sentiment_value':sentiment_normalized, 'sentiment_discrete':sentiment_discrete}, ignore_index = True)
+
+
+
+
+finaldf = pd.DataFrame()
+for i in range (0, RUNNUM):
     
-    final_trained_df = final_trained_df.append({'text': tweet, 'sentiment_value':sentiment_normalized}, ignore_index = True)
-
-tweets_train = tweets_train
-print(final_trained_df)
-
-#Dividing into test set and deleting neutral data from training data
-
-
-
-
-
-
+    orig_sent_adj = red_data.airline_sentiment_confidence.loc[i]
+    if red_data.airline_sentiment.loc[i] == 'negative':
+        orig_sent_adj = -orig_sent_adj
+    elif red_data.airline_sentiment.loc[i] == 'neutral':
+        orig_sent_adj = 0
+    
+    finaldf = finaldf.append({'ORIGINAL TWEET':red_data.text.loc[i],
+                              'ORIGINAL_AIRLINE':red_data.airline.loc[i],
+                              'VADER_AIRLINE':vaderdf.airline.loc[i],
+                              'TIME':red_data.tweet_created.loc[i],
+                              'ORIGINAL_SENTIMENT':red_data.airline_sentiment.loc[i],
+                              'ORINGINAL_SENTVAL_ADJUSTED':orig_sent_adj, #SIMPLY TAKES CONFIDENCE AND INVERTS FOR NEGATIVE SENTIMENT AND SETS TO 0 FOR NEUTRAL                             
+                              'VADER_SENTIMENT':vaderdf.Sentiment.loc[i],
+                              'VADER_SENTVAL':vaderdf.comp.loc[i],
+                              'TRAINED_SENTIMENT':trained_df.sentiment_discrete.loc[i],
+                              'TRAINED_SENTVAL':trained_df.sentiment_value.loc[i],
+                                }, ignore_index = True)
 
     
 
+#writer = ExcelWriter('export.xlsx')
+#finaldf.to_excel(writer, sheet_name = 'sheet2')
+#writer.save()
+#NOTE FILE TOO BIG IF FULL ANALYSIS IS DONE
 
 
+##DATA VISUALIZATION
+
+finaldf = pd.melt(finaldf, value_vars=['TRAINED_SENTVAL', 'VADER_SENTVAL', 'ORINGINAL_SENTVAL_ADJUSTED'], id_vars='ORIGINAL_SENTIMENT')
+
+#%%
+sns.set(style = "whitegrid")
+
+plot1 = sns.violinplot(x='variable', y='value', hue = 'ORIGINAL_SENTIMENT', data = finaldf)
+plt.legend(loc='lower left')
+plt.show()
+fig1 = plot1.get_figure()
+fig1.savefig('15trainingviolin.png')
+
+
+plot2 = sns.boxplot(x='variable', y='value', hue = 'ORIGINAL_SENTIMENT', data = finaldf)
+plt.legend(loc='lower left')
+plt.show()
+fig2 = plot2.get_figure()
+fig2.savefig('15trainingbox.png')
+
+plot3 = sns.lvplot(x='variable', y='value', hue = 'ORIGINAL_SENTIMENT', data = finaldf)
+plt.legend(loc='lower left')
+plt.show()
+fig3 = plot3.get_figure()
+fig3.savefig('15traininglv.png')
+
+plot4 = sns.swarmplot(x='variable', y='value', hue = 'ORIGINAL_SENTIMENT', data = finaldf)
+plt.legend(loc='lower left')
+plt.show()
+fig4 = plot4.get_figure()
+fig4.savefig('15traininglv.png')
+#%%
