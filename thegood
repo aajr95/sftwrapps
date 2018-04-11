@@ -1,0 +1,86 @@
+#I HAVE INCLUDED WORKINGS AS COMMENTS TO BETTER SHOW PROCESS
+
+####Setup
+
+import pandas as pd
+#vader sentiment analysis tool citation : Hutto, C.J. & Gilbert, E.E. (2014). VADER: A Parsimonious Rule-based Model for Sentiment Analysis of Social Media Text. Eighth International Conference on Weblogs and Social Media (ICWSM-14). Ann Arbor, MI, June 2014.
+from nltk.sentiment.vader import SentimentIntensityAnalyzer 
+sia = SentimentIntensityAnalyzer()
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import matplotlib.pyplot as plot
+
+file = 'G:\Tweets.CSV'#REFERENCE TWEET CSV LOCATION
+pd.set_option('max_colwidth', 800)#displays full tweets
+
+#reading data and storing stopwords for cleaning of data later
+red_data = pd.read_csv(file)
+red_data['tweet_created'] = pd.to_datetime(red_data['tweet_created'])
+stopwords = stopwords.words("english")
+
+
+#listing all airlines in original dataset to create column dataframe below, lowercasing and stripping space
+airlines = list(red_data.airline.unique())
+airlines1 = [x.lower() for x in airlines]
+airlines2 = [x.replace(' ','') for x in airlines]
+airlines3 = [x.replace(' ','') for x in airlines1]
+airlines = airlines + airlines1 + airlines2 + airlines3
+
+
+#THIS IS THE DATASET BEING INTERPRITED. HEAD IS USED TO SPEED UP TESTING. REMOVE '.head(number)' TO PERFORM OPERATION OVER FULL DATASET
+condensed = red_data.head(20)
+
+
+
+
+
+####Pre-Processing for vader
+#Not entirely sure about efficiency of this process however this is the method I am used to programming in. 
+#All values are processed and assigned within a loop and added to the dataframe at the end of the loop. 
+#dataset conversion and stopword cleaning
+
+vaderdf = pd.DataFrame()
+
+for i in range(0, len(condensed)):
+    
+    #CLEANUP AND RESTRING
+    tokenized = word_tokenize(str(condensed.text.loc[i]).lower())
+    cleaned = [word for word in tokenized if word not in stopwords]
+    rejoined = ' '.join(cleaned)
+    
+    #AIRLINE CLASSIFICATION
+    for x in airlines:
+        if x in rejoined.split():
+            ref_airline = x
+            
+    #VVVVVADER
+    values = list(sia.polarity_scores(rejoined).values())
+
+
+
+    
+    #Discrete determination - set values for identifying positive or negative tweet as per : https://github.com/cjhutto/vaderSentiment/blob/master/README.rst#about-the-scoring
+    sentiment = 'neutral'
+    if values[3] >= 0.05:
+        sentiment = 'postitive'
+    elif values[3] <= -0.05:
+        sentiment = 'negative'
+
+       
+     
+    ##STORE
+    vaderdf = vaderdf.append({'text': cleaned, 'neg':values[0], 'neutral':values[1], 'positive':values[2], 'comp':values[3], 'airline':ref_airline,'Post Time':condensed.tweet_created.loc[i], 'Sentiment':sentiment },ignore_index=True)
+ 
+
+
+print(vaderdf)
+#print(workingdf)
+
+#SCRAPPPP
+#sentences = ["hello","this is fantastic"] #was checking vadar needed to add joined line to use properly as quotation marks were causing problems
+#    workingdfneg = workingdfneg.append({'negative':values[1]},ignore_index=True)
+#    workingdfneu = workingdfneu.append({'neutral':values[2]},ignore_index=True)
+#    workingdfpos = workingdfpos.append({'positive':values[3]},ignore_index=True)
+#    workingdfcomp = workingdcomp.append({'compound':values[4]},ignore_index=True) #ERROR WAS VALUES STARTS AT 0 NOT 1 ;_;
+
+
